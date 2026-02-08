@@ -7,7 +7,10 @@ class MemTable(private val maxSizeBytes: Long) {
     private val data = ConcurrentSkipListMap<String, ByteArray?>()
     private val sizeInBytes = AtomicLong(0)
 
-    fun put(key: String, value: ByteArray?) {
+    fun put(
+        key: String,
+        value: ByteArray?,
+    ) {
         val entrySize = key.length + (value?.size ?: 0)
         data[key] = value
         sizeInBytes.addAndGet(entrySize.toLong())
@@ -15,7 +18,10 @@ class MemTable(private val maxSizeBytes: Long) {
 
     fun get(key: String): ByteArray? = data[key]
 
-    fun getRange(startKey: String, endKey: String): List<Pair<String, ByteArray?>> {
+    fun getRange(
+        startKey: String,
+        endKey: String,
+    ): List<Pair<String, ByteArray?>> {
         return data.subMap(startKey, true, endKey, true)
             .entries.filter { it.value != null }
             .map { it.key to it.value!! }

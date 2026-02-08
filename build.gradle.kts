@@ -1,3 +1,6 @@
+import io.micronaut.gradle.docker.NativeImageDockerfile
+import org.jetbrains.kotlin.js.inline.clean.removeUnusedImports
+
 plugins {
     id("org.jetbrains.kotlin.jvm") version "1.9.25"
     id("org.jetbrains.kotlin.plugin.allopen") version "1.9.25"
@@ -5,6 +8,7 @@ plugins {
     id("io.micronaut.application") version "4.6.1"
     id("com.gradleup.shadow") version "8.3.9"
     id("io.micronaut.aot") version "4.6.1"
+    id("com.diffplug.spotless") version "6.25.0"
 }
 
 version = "0.1"
@@ -61,8 +65,18 @@ micronaut {
 }
 
 
-tasks.named<io.micronaut.gradle.docker.NativeImageDockerfile>("dockerfileNative") {
+tasks.named<NativeImageDockerfile>("dockerfileNative") {
     jdkVersion = "21"
+}
+
+spotless {
+    kotlin {
+        target("src/**/*.kt")
+        ktlint("1.2.1")
+
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
 }
 
 

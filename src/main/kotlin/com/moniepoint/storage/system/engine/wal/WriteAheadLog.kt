@@ -9,10 +9,14 @@ class WriteAheadLog(private val file: File) {
     private val channel = randomAccessFile.channel
 
     @Synchronized
-    fun append(key: String, value: ByteArray?, isDelete: Boolean = false) {
+    fun append(
+        key: String,
+        value: ByteArray?,
+        isDelete: Boolean = false,
+    ) {
         val keyBytes = key.toByteArray()
         val valueBytes = value ?: byteArrayOf()
-        val valueSize = if(isDelete) -1 else valueBytes.size
+        val valueSize = if (isDelete) -1 else valueBytes.size
 
         val totalEntrySize = 4 + 4 + keyBytes.size + 4 + valueBytes.size
         val buffer = ByteBuffer.allocate(totalEntrySize)
@@ -45,13 +49,14 @@ class WriteAheadLog(private val file: File) {
                     val key = String(keyBytes)
 
                     val valueSize = randomAccessFile.readInt()
-                    val value = if (valueSize == -1) {
-                        null
-                    } else {
-                        val valueBytes = ByteArray(valueSize)
-                        randomAccessFile.read(valueBytes)
-                        valueBytes
-                    }
+                    val value =
+                        if (valueSize == -1) {
+                            null
+                        } else {
+                            val valueBytes = ByteArray(valueSize)
+                            randomAccessFile.read(valueBytes)
+                            valueBytes
+                        }
                     entries.add(key to value)
                 } catch (e: Exception) {
                     println("Exception : ${e.message}")

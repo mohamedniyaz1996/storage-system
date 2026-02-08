@@ -1,11 +1,10 @@
 package com.moniepoint.storage.system.engine.sstable
 
 import java.io.File
-import java.nio.ByteBuffer
 import java.io.RandomAccessFile
+import java.nio.ByteBuffer
 
 class SSTable(val file: File) {
-
     private val sparseIndex = mutableMapOf<String, Long>()
 
     init {
@@ -77,7 +76,7 @@ class SSTable(val file: File) {
         RandomAccessFile(file, "r").use { randomAccessFile ->
             randomAccessFile.seek(offset)
             while (randomAccessFile.filePointer < randomAccessFile.length()) {
-                val keySize =randomAccessFile.readInt()
+                val keySize = randomAccessFile.readInt()
                 val keyBytes = ByteArray(keySize)
                 randomAccessFile.read(keyBytes)
                 val currentKey = String(keyBytes)
@@ -98,7 +97,10 @@ class SSTable(val file: File) {
         return null
     }
 
-    fun getRange(startKey: String, endKey: String): List<Pair<String, ByteArray?>> {
+    fun getRange(
+        startKey: String,
+        endKey: String,
+    ): List<Pair<String, ByteArray?>> {
         val results = mutableListOf<Pair<String, ByteArray?>>()
         val floorKey = sparseIndex.keys.sorted().lastOrNull { it <= startKey } ?: sparseIndex.keys.minOrNull() ?: return emptyList()
         val offset = sparseIndex[floorKey]!!
@@ -114,11 +116,14 @@ class SSTable(val file: File) {
 
                 if (currentKey > endKey) break
 
-                val vBytes = if (vSize == -1) null else {
-                    val b = ByteArray(vSize)
-                    raf.read(b)
-                    b
-                }
+                val vBytes =
+                    if (vSize == -1) {
+                        null
+                    } else {
+                        val b = ByteArray(vSize)
+                        raf.read(b)
+                        b
+                    }
 
                 if (currentKey >= startKey) {
                     results.add(currentKey to vBytes)

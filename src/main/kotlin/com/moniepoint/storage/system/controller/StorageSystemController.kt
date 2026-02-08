@@ -1,32 +1,54 @@
 package com.moniepoint.storage.system.controller
 
 import com.moniepoint.storage.system.engine.StorageSystemEngine
+import io.micronaut.http.HttpResponse
+import io.micronaut.http.HttpStatus
 import io.micronaut.http.annotation.Body
+import io.micronaut.http.annotation.Consumes
 import io.micronaut.http.annotation.Controller
 import io.micronaut.http.annotation.Delete
 import io.micronaut.http.annotation.Get
 import io.micronaut.http.annotation.PathVariable
+import io.micronaut.http.annotation.Produces
 import io.micronaut.http.annotation.Put
-import java.util.Base64
-
 
 @Controller("/v1/storage-system")
 class StorageSystemController(
-    private val storageSystemEngine: StorageSystemEngine
+    private val storageSystemEngine: StorageSystemEngine,
 ) {
-
     @Put("/{key}")
-    fun put(@PathVariable key: String, @Body value: String) {
-        val bytes = Base64.getDecoder().decode(value)
-        storageSystemEngine.put(key, bytes)
+    @Consumes("text/plain")
+    fun put(
+        @PathVariable key: String,
+        @Body value: String,
+    ): HttpResponse<Unit> {
+        return try {
+            val bytes = value.toByteArray(Charsets.UTF_8)
+            storageSystemEngine.put(key, bytes)
+            HttpResponse.status(HttpStatus.CREATED)
+        } catch (e: Exception) {
+            HttpResponse.serverError()
+        }
     }
 
     @Get("/{key}")
-    fun get(@PathVariable key: String): String? {
-        val result = storageSystemEngine.read(key) ?: return null
-        return Base64.getEncoder().encodeToString(result)
+    @Produces("text/plain")
+    fun get(
+        @PathVariable key: String,
+    ): HttpResponse<String> {
+        val bytes = storageSystemEngine.read(key)
+        return if (bytes == null) {
+            HttpResponse.noContent()
+        } else {
+            HttpResponse.ok(String(bytes))
+        }
     }
 
     @Delete("/{key}")
-    fun delete(@PathVariable key: String) = storageSystemEngine.delete(key)
+    fun delete(
+        @PathVariable key: String,
+    ) = storageSystemEngine.delete(key)
+
+    @Get("/ping")
+    fun isHealthy() = "Application is up and running healthy!!!"
 }
