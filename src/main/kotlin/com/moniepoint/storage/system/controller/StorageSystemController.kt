@@ -1,6 +1,8 @@
 package com.moniepoint.storage.system.controller
 
 import com.moniepoint.storage.system.engine.StorageSystemEngine
+import com.moniepoint.storage.system.models.BatchPutRequest
+import com.moniepoint.storage.system.models.PutRequest
 import io.micronaut.http.HttpResponse
 import io.micronaut.http.HttpStatus
 import io.micronaut.http.annotation.Body
@@ -16,15 +18,14 @@ import io.micronaut.http.annotation.Put
 class StorageSystemController(
     private val storageSystemEngine: StorageSystemEngine,
 ) {
-    @Put("/{key}")
-    @Consumes("text/plain")
+    @Put
+    @Consumes(io.micronaut.http.MediaType.APPLICATION_JSON)
     fun put(
-        @PathVariable key: String,
-        @Body value: String,
+        @Body request: PutRequest,
     ): HttpResponse<Unit> {
         return try {
-            val bytes = value.toByteArray(Charsets.UTF_8)
-            storageSystemEngine.put(key, bytes)
+            val bytes = request.value.toByteArray(Charsets.UTF_8)
+            storageSystemEngine.put(request.key, bytes)
             HttpResponse.status(HttpStatus.CREATED)
         } catch (e: Exception) {
             HttpResponse.serverError()
@@ -32,7 +33,7 @@ class StorageSystemController(
     }
 
     @Get("/{key}")
-    @Produces("text/plain")
+    @Produces(io.micronaut.http.MediaType.TEXT_PLAIN)
     fun get(
         @PathVariable key: String,
     ): HttpResponse<String> {
@@ -47,15 +48,25 @@ class StorageSystemController(
     @Delete("/{key}")
     fun delete(
         @PathVariable key: String,
-    ) = storageSystemEngine.delete(key)
-
-    @Put("/batch")
-    @Consumes("application/json")
-    fun batchPut(
-        @Body items: Map<String, String>,
     ): HttpResponse<Unit> {
         return try {
-            val byteItems = items.mapValues { it.value.toByteArray(Charsets.UTF_8) }
+            storageSystemEngine.delete(key)
+            HttpResponse.status(HttpStatus.OK)
+        } catch (e: Exception) {
+            HttpResponse.serverError()
+        }
+    }
+
+    @Put("/batch")
+    @Consumes(io.micronaut.http.MediaType.APPLICATION_JSON)
+    fun batchPut(
+        @Body request: BatchPutRequest,
+    ): HttpResponse<Unit> {
+        return try {
+            val byteItems =
+                request.items.associate {
+                    it.key to it.value.toByteArray(Charsets.UTF_8)
+                }
             storageSystemEngine.batchPut(byteItems)
             HttpResponse.ok()
         } catch (e: Exception) {
@@ -63,8 +74,8 @@ class StorageSystemController(
         }
     }
 
-    @Get("/range/{startKey}/{endKey}")
-    @Produces("application/json")
+    @Get("/{startKey}/{endKey}")
+    @Produces(io.micronaut.http.MediaType.APPLICATION_JSON)
     fun getRange(
         @PathVariable startKey: String,
         @PathVariable endKey: String,
