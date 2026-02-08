@@ -1,8 +1,10 @@
 package com.moniepoint.storage.system
 
+import com.moniepoint.storage.system.models.BatchPutRequest
 import com.moniepoint.storage.system.models.PutRequest
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
+import io.micronaut.core.type.Argument
 import io.micronaut.http.HttpRequest
 import io.micronaut.http.HttpStatus
 import io.micronaut.http.client.HttpClient
@@ -52,34 +54,56 @@ class StorageSystemBasicFunctionalTest(
             getResponse.status shouldBe HttpStatus.NO_CONTENT
         }
 
-//        test("should perform range scan successfully") {
-//            val requestPayload =
-//                BatchPutRequest(
-//                    items =
-//                        listOf(
-//                            PutRequest("a", "1"),
-//                            PutRequest("b", "2"),
-//                            PutRequest("c", "3"),
-//                        ),
-//                )
-//
-//            val batchPutRequest = HttpRequest.PUT("/batch", requestPayload)
-//            val batchPutResponse =
-//                storageSystemClient.toBlocking().exchange(
-//                    batchPutRequest,
-//                    Unit::class.java,
-//                )
-//            batchPutResponse.status shouldBe HttpStatus.CREATED
-//
-//            storageSystemClient.toBlocking().retrieve(
-//                HttpRequest.GET<List<Map<String, String>>>("/range/a/b"),
-//                List::class.java,
-//            ).size shouldBe 2
-//
-//            storageSystemClient.toBlocking().retrieve(
-//                HttpRequest.GET<List<Map<String, String>>>("/range/a/c"),
-//                List::class.java,
-//            ).size shouldBe 3
-//        }
+        test("should perform range scan successfully") {
+            val requestPayload =
+                BatchPutRequest(
+                    items =
+                        listOf(
+                            PutRequest("a", "1"),
+                            PutRequest("b", "2"),
+                            PutRequest("c", "3"),
+                        ),
+                )
+
+            println("Range Request-Payload: $requestPayload")
+
+            val batchPutRequest = HttpRequest.PUT("/batch", requestPayload)
+            val batchPutResponse =
+                storageSystemClient.toBlocking().exchange(
+                    batchPutRequest,
+                    Unit::class.java,
+                )
+            batchPutResponse.status shouldBe HttpStatus.CREATED
+
+            storageSystemClient.toBlocking().retrieve(
+                HttpRequest.GET<Any>("/range/a/b"),
+                Argument.listOf(Map::class.java),
+            ).size shouldBe 2
+
+            storageSystemClient.toBlocking().retrieve(
+                HttpRequest.GET<Any>("/range/a/c"),
+                Argument.listOf(Map::class.java),
+            ).size shouldBe 3
+        }
+
+        test("should return empty list for out-of-order range scan") {
+            val results =
+                storageSystemClient.toBlocking().retrieve(
+                    HttpRequest.GET<Any>("/range/z/a"),
+                    Argument.listOf(Map::class.java),
+                )
+            results shouldBe emptyList<Any>()
+        }
+
+        test("concurrency: should handle rapid updates to the same key and should be able to retrieve the latest updated version") {
+            val key = "concurrentKey"
+            val versions = listOf("v1", "v2", "v3", "v4", "v5")
+
+            versions.forEach { v ->
+                storageSystemClient.toBlocking().exchange(HttpRequest.PUT("", PutRequest(key, v)), Unit::class.java)
+            }
+
+            storageSystemClient.toBlocking().retrieve(key) shouldBe "v5"
+        }
     }
 }

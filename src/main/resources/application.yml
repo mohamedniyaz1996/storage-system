@@ -1,0 +1,6 @@
+micronaut:
+  application:
+    name: storage-system
+---
+storage:
+  root-dir: "data"

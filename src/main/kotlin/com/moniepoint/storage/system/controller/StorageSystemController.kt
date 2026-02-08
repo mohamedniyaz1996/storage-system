@@ -68,18 +68,23 @@ class StorageSystemController(
                     it.key to it.value.toByteArray(Charsets.UTF_8)
                 }
             storageSystemEngine.batchPut(byteItems)
-            HttpResponse.ok()
+            HttpResponse.status(HttpStatus.CREATED)
         } catch (e: Exception) {
             HttpResponse.serverError()
         }
     }
 
-    @Get("/{startKey}/{endKey}")
+    @Get("/range/{startKey}/{endKey}")
     @Produces(io.micronaut.http.MediaType.APPLICATION_JSON)
     fun getRange(
         @PathVariable startKey: String,
         @PathVariable endKey: String,
     ): HttpResponse<Any> {
+        if (startKey > endKey) {
+            // Return 200 OK with empty list (standard DB behavior)
+            return HttpResponse.ok(emptyList<Any>())
+        }
+
         return try {
             val results = storageSystemEngine.readKeyRange(startKey, endKey)
             val response =
@@ -87,7 +92,7 @@ class StorageSystemController(
                     mapOf("key" to key, "value" to (value?.let { String(it) } ?: ""))
                 }
             if (response.isEmpty()) {
-                HttpResponse.noContent()
+                HttpResponse.ok(emptyList<Any>())
             } else {
                 HttpResponse.ok(response)
             }

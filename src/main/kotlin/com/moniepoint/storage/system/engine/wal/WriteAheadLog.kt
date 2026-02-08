@@ -1,5 +1,6 @@
 package com.moniepoint.storage.system.engine.wal
 
+import java.io.EOFException
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
@@ -14,52 +15,66 @@ class WriteAheadLog(private val file: File) {
         value: ByteArray?,
         isDelete: Boolean = false,
     ) {
-        val keyBytes = key.toByteArray()
-        val valueBytes = value ?: byteArrayOf()
+        val keyBytes = key.toByteArray(Charsets.UTF_8)
+        val valueBytes = if (isDelete) byteArrayOf() else (value ?: byteArrayOf())
         val valueSize = if (isDelete) -1 else valueBytes.size
 
-        val totalEntrySize = 4 + 4 + keyBytes.size + 4 + valueBytes.size
-        val buffer = ByteBuffer.allocate(totalEntrySize)
+        val entryPayloadSize = 4 + keyBytes.size + 4 + (if (isDelete) 0 else valueBytes.size)
+        val totalSize = 4 + entryPayloadSize
 
-        buffer.putInt(totalEntrySize)
+        val buffer = ByteBuffer.allocate(totalSize)
+        buffer.putInt(totalSize)
         buffer.putInt(keyBytes.size)
         buffer.put(keyBytes)
         buffer.putInt(valueSize)
-        if (!isDelete) buffer.put(valueBytes)
+        if (!isDelete) {
+            buffer.put(valueBytes)
+        }
 
         buffer.flip()
         while (buffer.hasRemaining()) {
             channel.write(buffer)
         }
-
         channel.force(true)
     }
 
     fun readAllEntries(): List<Pair<String, ByteArray?>> {
         val entries = mutableListOf<Pair<String, ByteArray?>>()
-        if (file.length() == 0L) return entries
+        if (!file.exists() || file.length() == 0L) return entries
 
         RandomAccessFile(file, "r").use { randomAccessFile ->
-            while (randomAccessFile.filePointer < randomAccessFile.length()) {
+            val fileLength = randomAccessFile.length()
+            while (randomAccessFile.filePointer < fileLength) {
                 try {
-                    val totalEntrySize = randomAccessFile.readInt()
-                    val keySize = randomAccessFile.readInt()
-                    val keyBytes = ByteArray(keySize)
-                    randomAccessFile.read(keyBytes)
-                    val key = String(keyBytes)
+                    // 1. Read the header (Total size of this record)
+                    val recordSize = randomAccessFile.readInt()
 
+                    // 2. Read Key Size
+                    val keySize = randomAccessFile.readInt()
+                    if (keySize < 0 || keySize > 1024 * 1024) throw IllegalStateException("Corrupt key size: $keySize")
+
+                    // 3. Read Key (Use readFully!)
+                    val keyBytes = ByteArray(keySize)
+                    randomAccessFile.readFully(keyBytes)
+                    val key = String(keyBytes, Charsets.UTF_8)
+
+                    // 4. Read Value Size
                     val valueSize = randomAccessFile.readInt()
+
+                    // 5. Read Value
                     val value =
                         if (valueSize == -1) {
                             null
                         } else {
                             val valueBytes = ByteArray(valueSize)
-                            randomAccessFile.read(valueBytes)
+                            randomAccessFile.readFully(valueBytes)
                             valueBytes
                         }
                     entries.add(key to value)
+                } catch (e: EOFException) {
+                    break
                 } catch (e: Exception) {
-                    println("Exception : ${e.message}")
+                    println("WAL Restore Error at offset ${randomAccessFile.filePointer}: ${e.message}")
                     break
                 }
             }

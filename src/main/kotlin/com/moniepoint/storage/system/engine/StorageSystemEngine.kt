@@ -4,13 +4,16 @@ import com.moniepoint.storage.system.contract.StorageEngineInterface
 import com.moniepoint.storage.system.engine.memtable.MemTable
 import com.moniepoint.storage.system.engine.sstable.SSTable
 import com.moniepoint.storage.system.engine.wal.WriteAheadLog
+import io.micronaut.context.annotation.Property
 import jakarta.inject.Singleton
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 
 @Singleton
-class StorageSystemEngine : StorageEngineInterface {
-    private val rootDir = File("data").apply { if (!exists()) mkdirs() }
+class StorageSystemEngine(
+    @property:Property(name = "storage.root-dir") private val rootDirPath: String,
+) : StorageEngineInterface {
+    private val rootDir = File(rootDirPath).apply { if (!exists()) mkdirs() }
     private val wal = WriteAheadLog(File(rootDir, "current.wal"))
     private var memTable = MemTable(128 * 1024 * 1024) // setting 124MB as default
 
