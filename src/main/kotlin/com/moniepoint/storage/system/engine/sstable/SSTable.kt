@@ -12,26 +12,27 @@ class SSTable(val file: File) {
 
     init {
         if (file.exists() && file.length() > 0) {
-            rebuildIndex()
+            rebuildIndexAndFilter()
         }
     }
 
-    private fun rebuildIndex() {
+    private fun rebuildIndexAndFilter() {
         RandomAccessFile(file, "r").use { randomAccessFile ->
             var offset = 0L
             var count = 0
             while (offset < randomAccessFile.length()) {
-                if (count % 100 == 0) {
-                    randomAccessFile.seek(offset)
-                    val keySize = randomAccessFile.readInt()
-                    val keyBytes = ByteArray(keySize)
-                    randomAccessFile.read(keyBytes)
-                    sparseIndex[String(keyBytes)] = offset
-                }
-
                 randomAccessFile.seek(offset)
                 val keySize = randomAccessFile.readInt()
-                randomAccessFile.skipBytes(keySize)
+                val keyBytes = ByteArray(keySize)
+                randomAccessFile.readFully(keyBytes)
+                val key = String(keyBytes)
+
+                bloomFilter.add(key)
+
+                if (count % 100 == 0) {
+                    sparseIndex[key] = offset
+                }
+
                 val valueSize = randomAccessFile.readInt()
                 if (valueSize > 0) randomAccessFile.skipBytes(valueSize)
 
@@ -70,35 +71,6 @@ class SSTable(val file: File) {
 
         channel.force(true)
         randomAccessFile.close()
-    }
-
-    fun get(key: String): ByteArray? {
-        val indexedKeys = sparseIndex.keys.sorted()
-        val floorKey = indexedKeys.lastOrNull { it <= key } ?: return null
-        val offset = sparseIndex[floorKey]!!
-
-        RandomAccessFile(file, "r").use { randomAccessFile ->
-            randomAccessFile.seek(offset)
-            while (randomAccessFile.filePointer < randomAccessFile.length()) {
-                val keySize = randomAccessFile.readInt()
-                val keyBytes = ByteArray(keySize)
-                randomAccessFile.read(keyBytes)
-                val currentKey = String(keyBytes)
-                val valueSize = randomAccessFile.readInt()
-
-                if (currentKey == key) {
-                    if (valueSize == -1) return null
-                    val valueBytes = ByteArray(valueSize)
-                    randomAccessFile.read(valueBytes)
-                    return valueBytes
-                }
-
-                if (currentKey > key) return null
-
-                if (valueSize > 0) randomAccessFile.skipBytes(valueSize)
-            }
-        }
-        return null
     }
 
     fun getRange(
@@ -152,18 +124,15 @@ class SSTable(val file: File) {
             while (randomAccessFile.filePointer < randomAccessFile.length()) {
                 val keySize = randomAccessFile.readInt()
                 val keyBytes = ByteArray(keySize)
-                randomAccessFile.read(keyBytes)
+                randomAccessFile.readFully(keyBytes)
                 val currentKey = String(keyBytes)
-
                 val valueSize = randomAccessFile.readInt()
 
                 if (currentKey == key) {
                     return if (valueSize == -1) {
                         SearchResult(true, null)
                     } else {
-                        val valueBytes = ByteArray(valueSize)
-                        randomAccessFile.read(valueBytes)
-                        SearchResult(true, valueBytes)
+                        SearchResult(true, readValue(randomAccessFile, valueSize))
                     }
                 }
 
@@ -177,5 +146,14 @@ class SSTable(val file: File) {
             }
         }
         return SearchResult(false, null)
+    }
+
+    private fun readValue(
+        raf: RandomAccessFile,
+        size: Int,
+    ): ByteArray {
+        val b = ByteArray(size)
+        raf.readFully(b)
+        return b
     }
 }
