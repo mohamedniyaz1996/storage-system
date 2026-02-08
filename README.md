@@ -40,7 +40,7 @@ Ensure you have JDK 17+ installed.
 # Run the application
 ./gradlew run
 ```
-The server will start on http://localhost:8080. Data is stored in the directory defined in application.yml (default: ./storage).
+The server will start on http://localhost:8080. Data is stored in the directory defined in application.yml (default: ./data).
 
 
 ### 2. Docker Mode

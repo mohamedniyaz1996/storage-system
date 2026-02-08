@@ -11,7 +11,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 @Singleton
 class StorageSystemEngine(
-    @property:Property(name = "storage.root-dir") private val rootDirPath: String,
+    @property:Property(name = "storage.root-dir:data") private val rootDirPath: String,
     private val memTable: MemTable,
 ) : StorageEngineInterface {
     private val rootDir = File(rootDirPath).apply { if (!exists()) mkdirs() }
