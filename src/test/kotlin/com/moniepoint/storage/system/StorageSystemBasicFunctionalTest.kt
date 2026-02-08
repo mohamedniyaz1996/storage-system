@@ -1,20 +1,31 @@
 package com.moniepoint.storage.system
 
+import com.moniepoint.storage.system.engine.StorageSystemEngine
 import com.moniepoint.storage.system.models.BatchPutRequest
 import com.moniepoint.storage.system.models.PutRequest
 import io.kotest.core.spec.style.FunSpec
+import io.kotest.core.test.TestCase
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldMatch
 import io.micronaut.core.type.Argument
 import io.micronaut.http.HttpRequest
 import io.micronaut.http.HttpStatus
 import io.micronaut.http.client.HttpClient
 import io.micronaut.http.client.annotation.Client
 import io.micronaut.test.extensions.kotest5.annotation.MicronautTest
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 @MicronautTest
 class StorageSystemBasicFunctionalTest(
     @param:Client("/v1/storage-system") val storageSystemClient: HttpClient,
+    private val engine: StorageSystemEngine,
 ) : FunSpec() {
+    override suspend fun beforeTest(testCase: TestCase) {
+        engine.resetInternalState()
+    }
+
     init {
         test("should successfully store and retrieve a value") {
             val key = "testKey"
@@ -31,9 +42,10 @@ class StorageSystemBasicFunctionalTest(
 
         test("should return 204 No Content for a missing key") {
             val randomKey = "random-key"
+            val getRequest = HttpRequest.GET<Any>("/$randomKey")
             val response =
                 storageSystemClient.toBlocking().exchange(
-                    HttpRequest.GET<Any>("/$randomKey"),
+                    getRequest,
                     String::class.java,
                 )
             response.status shouldBe HttpStatus.NO_CONTENT
@@ -65,8 +77,6 @@ class StorageSystemBasicFunctionalTest(
                         ),
                 )
 
-            println("Range Request-Payload: $requestPayload")
-
             val batchPutRequest = HttpRequest.PUT("/batch", requestPayload)
             val batchPutResponse =
                 storageSystemClient.toBlocking().exchange(
@@ -75,21 +85,30 @@ class StorageSystemBasicFunctionalTest(
                 )
             batchPutResponse.status shouldBe HttpStatus.CREATED
 
-            storageSystemClient.toBlocking().retrieve(
-                HttpRequest.GET<Any>("/range/a/b"),
-                Argument.listOf(Map::class.java),
-            ).size shouldBe 2
+            var getRequest = HttpRequest.GET<Any>("/range/a/b")
+            var rangeResponse =
+                storageSystemClient.toBlocking().retrieve(
+                    getRequest,
+                    Argument.listOf(Map::class.java),
+                )
 
-            storageSystemClient.toBlocking().retrieve(
-                HttpRequest.GET<Any>("/range/a/c"),
-                Argument.listOf(Map::class.java),
-            ).size shouldBe 3
+            rangeResponse.size shouldBe 2
+
+            getRequest = HttpRequest.GET<Any>("/range/a/c")
+            rangeResponse =
+                storageSystemClient.toBlocking().retrieve(
+                    getRequest,
+                    Argument.listOf(Map::class.java),
+                )
+
+            rangeResponse.size shouldBe 3
         }
 
         test("should return empty list for out-of-order range scan") {
+            val getRequest = HttpRequest.GET<Any>("/range/z/a")
             val results =
                 storageSystemClient.toBlocking().retrieve(
-                    HttpRequest.GET<Any>("/range/z/a"),
+                    getRequest,
                     Argument.listOf(Map::class.java),
                 )
             results shouldBe emptyList<Any>()
@@ -100,7 +119,8 @@ class StorageSystemBasicFunctionalTest(
             val versions = listOf("v1", "v2", "v3", "v4", "v5")
 
             versions.forEach { v ->
-                storageSystemClient.toBlocking().exchange(HttpRequest.PUT("", PutRequest(key, v)), Unit::class.java)
+                val putRequest = HttpRequest.PUT("", PutRequest(key, v))
+                storageSystemClient.toBlocking().exchange(putRequest, Unit::class.java)
             }
 
             storageSystemClient.toBlocking().retrieve(key) shouldBe "v5"
@@ -108,21 +128,44 @@ class StorageSystemBasicFunctionalTest(
 
         test("should handle empty batch put requests gracefully") {
             val emptyPayload = BatchPutRequest(items = emptyList())
+            val putRequest = HttpRequest.PUT("/batch", emptyPayload)
             val response =
                 storageSystemClient.toBlocking().exchange(
-                    HttpRequest.PUT("/batch", emptyPayload),
+                    putRequest,
                     Unit::class.java,
                 )
             response.status shouldBe HttpStatus.CREATED
         }
 
         test("should return empty list when no keys exist in the provided range") {
+            val getRequest = HttpRequest.GET<Any>("/range/m/n")
             val results =
                 storageSystemClient.toBlocking().retrieve(
-                    HttpRequest.GET<Any>("/range/m/n"),
+                    getRequest,
                     Argument.listOf(Map::class.java),
                 )
             results shouldBe emptyList<Any>()
+        }
+
+        test("concurrency: should handle multiple threads writing to the same key") {
+            val key = "threadSafeKey"
+            val iterations = 100
+
+            runBlocking {
+                (1..iterations).map { i ->
+                    launch(kotlinx.coroutines.Dispatchers.IO) {
+                        val putRequest = HttpRequest.PUT("", PutRequest(key, "val-$i"))
+                        storageSystemClient.toBlocking().exchange(
+                            putRequest,
+                            Unit::class.java,
+                        )
+                    }
+                }.joinAll()
+            }
+
+            // The result should be one of the values (no crash/deadlock)
+            val finalVal = storageSystemClient.toBlocking().retrieve(key)
+            finalVal shouldMatch Regex("val-\\d+")
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.moniepoint.storage.system
 
 import com.moniepoint.storage.system.models.PutRequest
+import io.kotest.core.spec.Spec
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.comparables.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
@@ -19,6 +20,14 @@ class StorageSystemRequirementsTest(
     @param:Client("/v1/storage-system") val storageSystemClient: HttpClient,
     @property:Property(name = "storage.root-dir") private val rootDirPath: String,
 ) : BehaviorSpec() {
+    override suspend fun beforeSpec(spec: Spec) {
+        val storageDir = File(rootDirPath)
+        if (storageDir.exists()) {
+            storageDir.deleteRecursively()
+        }
+        storageDir.mkdirs()
+    }
+
     init {
         val storageDir = File(rootDirPath)
 

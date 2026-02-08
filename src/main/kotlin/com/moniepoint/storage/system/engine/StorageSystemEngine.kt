@@ -63,6 +63,14 @@ class StorageSystemEngine(
         wal.clear()
     }
 
+    fun resetInternalState() {
+        memTable.clear()
+        ssTables.clear()
+        wal.clear()
+        nextSequence = 0L
+        rootDir.listFiles()?.forEach { it.delete() }
+    }
+
     @Synchronized
     override fun put(
         key: String,
