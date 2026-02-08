@@ -4,3 +4,4 @@ micronaut:
 ---
 storage:
   root-dir: "data"
+  mem-table-max-bytes: 10485760

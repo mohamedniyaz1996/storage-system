@@ -12,10 +12,10 @@ import java.util.concurrent.CopyOnWriteArrayList
 @Singleton
 class StorageSystemEngine(
     @property:Property(name = "storage.root-dir") private val rootDirPath: String,
+    private val memTable: MemTable,
 ) : StorageEngineInterface {
     private val rootDir = File(rootDirPath).apply { if (!exists()) mkdirs() }
     private val wal = WriteAheadLog(File(rootDir, "current.wal"))
-    private var memTable = MemTable()
 
     private val ssTables = CopyOnWriteArrayList<SSTable>()
 
@@ -59,7 +59,7 @@ class StorageSystemEngine(
 
         ssTables.add(0, SSTable(finalFile))
 
-        memTable = MemTable()
+        memTable.clear()
         wal.clear()
     }
 

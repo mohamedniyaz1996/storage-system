@@ -1,2 +1,7 @@
+micronaut:
+  application:
+    name: storage-system
+---
 storage:
   root-dir: "build/test-data"
+  mem-table-max-bytes: 1024
