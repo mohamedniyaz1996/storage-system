@@ -1,13 +1,14 @@
 package com.moniepoint.storage.system.engine.wal
 
-import java.io.EOFException
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
+import java.util.zip.CRC32
 
 class WriteAheadLog(private val file: File) {
     private val randomAccessFile = RandomAccessFile(file, "rw")
     private val channel = randomAccessFile.channel
+    private val crc = CRC32()
 
     @Synchronized
     fun append(
@@ -16,20 +17,26 @@ class WriteAheadLog(private val file: File) {
         isDelete: Boolean = false,
     ) {
         val keyBytes = key.toByteArray(Charsets.UTF_8)
-        val valueBytes = if (isDelete) byteArrayOf() else (value ?: byteArrayOf())
+        val valueBytes = value ?: byteArrayOf()
         val valueSize = if (isDelete) -1 else valueBytes.size
 
-        val entryPayloadSize = 4 + keyBytes.size + 4 + (if (isDelete) 0 else valueBytes.size)
-        val totalSize = 4 + entryPayloadSize
+        // Layout: [TotalSize:4] [CRC:8] [KeySize:4] [Key] [ValSize:4] [Val]
+        val payloadSize = 4 + keyBytes.size + 4 + (if (isDelete) 0 else valueBytes.size)
+        val totalSize = 4 + 8 + payloadSize
 
         val buffer = ByteBuffer.allocate(totalSize)
         buffer.putInt(totalSize)
+        buffer.putLong(0L) // Placeholder for CRC
         buffer.putInt(keyBytes.size)
         buffer.put(keyBytes)
         buffer.putInt(valueSize)
-        if (!isDelete) {
-            buffer.put(valueBytes)
-        }
+        if (!isDelete) buffer.put(valueBytes)
+
+        // Calculate CRC on the data payload (from offset 12 to end)
+        crc.reset()
+        buffer.position(12)
+        crc.update(buffer)
+        buffer.putLong(4, crc.value)
 
         buffer.flip()
         while (buffer.hasRemaining()) {
@@ -40,43 +47,43 @@ class WriteAheadLog(private val file: File) {
 
     fun readAllEntries(): List<Pair<String, ByteArray?>> {
         val entries = mutableListOf<Pair<String, ByteArray?>>()
-        if (!file.exists() || file.length() == 0L) return entries
+        if (!file.exists() || file.length() < 12) return entries
 
-        RandomAccessFile(file, "r").use { randomAccessFile ->
-            val fileLength = randomAccessFile.length()
-            while (randomAccessFile.filePointer < fileLength) {
-                try {
-                    // 1. Read the header (Total size of this record)
-                    val recordSize = randomAccessFile.readInt()
+        randomAccessFile.seek(0)
+        while (randomAccessFile.filePointer < randomAccessFile.length()) {
+            val startOffset = randomAccessFile.filePointer
+            try {
+                val totalSize = randomAccessFile.readInt()
+                val storedCrc = randomAccessFile.readLong()
 
-                    // 2. Read Key Size
-                    val keySize = randomAccessFile.readInt()
-                    if (keySize < 0 || keySize > 1024 * 1024) throw IllegalStateException("Corrupt key size: $keySize")
+                // Read the rest of the record to verify CRC
+                val payloadSize = totalSize - 12
+                val payload = ByteArray(payloadSize)
+                randomAccessFile.readFully(payload)
 
-                    // 3. Read Key (Use readFully!)
-                    val keyBytes = ByteArray(keySize)
-                    randomAccessFile.readFully(keyBytes)
-                    val key = String(keyBytes, Charsets.UTF_8)
-
-                    // 4. Read Value Size
-                    val valueSize = randomAccessFile.readInt()
-
-                    // 5. Read Value
-                    val value =
-                        if (valueSize == -1) {
-                            null
-                        } else {
-                            val valueBytes = ByteArray(valueSize)
-                            randomAccessFile.readFully(valueBytes)
-                            valueBytes
-                        }
-                    entries.add(key to value)
-                } catch (e: EOFException) {
-                    break
-                } catch (e: Exception) {
-                    println("WAL Restore Error at offset ${randomAccessFile.filePointer}: ${e.message}")
+                crc.reset()
+                crc.update(payload)
+                if (crc.value != storedCrc) {
+                    println("Corruption detected at offset $startOffset. Stopping recovery.")
                     break
                 }
+
+                val buffer = ByteBuffer.wrap(payload)
+                val keySize = buffer.getInt()
+                val keyBytes = ByteArray(keySize)
+                buffer.get(keyBytes)
+                val valueSize = buffer.getInt()
+                val value =
+                    if (valueSize == -1) {
+                        null
+                    } else {
+                        val valueBytes = ByteArray(valueSize)
+                        buffer.get(valueBytes)
+                        valueBytes
+                    }
+                entries.add(String(keyBytes) to value)
+            } catch (e: Exception) {
+                break
             }
         }
         return entries
@@ -84,7 +91,6 @@ class WriteAheadLog(private val file: File) {
 
     fun clear() {
         channel.truncate(0)
+        channel.force(true)
     }
-
-    fun close() = randomAccessFile.close()
 }

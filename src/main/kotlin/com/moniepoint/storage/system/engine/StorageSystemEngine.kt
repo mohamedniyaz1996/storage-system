@@ -40,11 +40,21 @@ class StorageSystemEngine(
 
     private fun flushMemTable() {
         val fileName = "ssTable-${System.currentTimeMillis()}.db"
-        val newTable = SSTable(File(rootDir, fileName))
+        val tempFile = File(rootDir, "$fileName.tmp")
+        val finalFile = File(rootDir, fileName)
 
+        val newTable = SSTable(tempFile)
+
+        // Write MemTable to temporary file
         newTable.write(memTable.retrieveSortedEntries())
 
-        ssTables.add(0, newTable)
+        // Atomic Rename
+        tempFile.renameTo(finalFile)
+
+        // Update memory state
+        ssTables.add(0, SSTable(finalFile))
+
+        // Safe to clear MemTable and WAL now
         memTable.clear()
         wal.clear()
     }
