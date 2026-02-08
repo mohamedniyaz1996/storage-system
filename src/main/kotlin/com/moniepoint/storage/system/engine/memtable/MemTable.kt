@@ -11,12 +11,17 @@ class MemTable(private val maxSizeBytes: Long) {
         key: String,
         value: ByteArray?,
     ) {
-        val entrySize = key.length + (value?.size ?: 0)
-        data[key] = value
+        val actualValue = value ?: TOMBSTONE // Use marker if null
+
+        val entrySize = key.length + actualValue.size
+        data[key] = actualValue
         sizeInBytes.addAndGet(entrySize.toLong())
     }
 
-    fun get(key: String): ByteArray? = data[key]
+    fun get(key: String): ByteArray? {
+        val result = data[key]
+        return if (result === TOMBSTONE) null else result
+    }
 
     fun getRange(
         startKey: String,
@@ -31,8 +36,14 @@ class MemTable(private val maxSizeBytes: Long) {
 
     fun retrieveSortedEntries() = data.entries
 
+    fun containsKey(key: String) = data.containsKey(key)
+
     fun clear() {
         data.clear()
         sizeInBytes.set(0)
+    }
+
+    companion object {
+        val TOMBSTONE = byteArrayOf()
     }
 }

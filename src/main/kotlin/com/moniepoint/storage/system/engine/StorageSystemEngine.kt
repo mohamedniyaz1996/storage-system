@@ -64,12 +64,15 @@ class StorageSystemEngine : StorageEngineInterface {
     }
 
     override fun read(key: String): ByteArray? {
-        val ramResult = memTable.get(key)
-        if (ramResult != null) return ramResult
+        if (memTable.containsKey(key) || memTable.get(key) != null) {
+            return memTable.get(key)
+        }
 
         for (table in ssTables) {
-            val diskResult = table.get(key)
-            if (diskResult != null) return diskResult
+            val result = table.getWithTombstone(key)
+            if (result.found) {
+                return result.value
+            }
         }
 
         return null

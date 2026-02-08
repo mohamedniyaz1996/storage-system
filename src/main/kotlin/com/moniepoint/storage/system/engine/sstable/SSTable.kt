@@ -1,5 +1,6 @@
 package com.moniepoint.storage.system.engine.sstable
 
+import com.moniepoint.storage.system.models.SearchResult
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
@@ -131,5 +132,44 @@ class SSTable(val file: File) {
             }
         }
         return results
+    }
+
+    fun getWithTombstone(key: String): SearchResult {
+        // 1. Find the best starting point using the Sparse Index
+        val indexedKeys = sparseIndex.keys.sorted()
+        val floorKey = indexedKeys.lastOrNull { it <= key } ?: return SearchResult(false, null)
+        val offset = sparseIndex[floorKey]!!
+
+        RandomAccessFile(file, "r").use { randomAccessFile ->
+            randomAccessFile.seek(offset)
+
+            while (randomAccessFile.filePointer < randomAccessFile.length()) {
+                val keySize = randomAccessFile.readInt()
+                val keyBytes = ByteArray(keySize)
+                randomAccessFile.read(keyBytes)
+                val currentKey = String(keyBytes)
+
+                val valueSize = randomAccessFile.readInt()
+
+                if (currentKey == key) {
+                    return if (valueSize == -1) {
+                        SearchResult(true, null)
+                    } else {
+                        val valueBytes = ByteArray(valueSize)
+                        randomAccessFile.read(valueBytes)
+                        SearchResult(true, valueBytes)
+                    }
+                }
+
+                if (currentKey > key) {
+                    return SearchResult(false, null)
+                }
+
+                if (valueSize > 0) {
+                    randomAccessFile.skipBytes(valueSize)
+                }
+            }
+        }
+        return SearchResult(false, null)
     }
 }

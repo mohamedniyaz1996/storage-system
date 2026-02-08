@@ -49,6 +49,42 @@ class StorageSystemController(
         @PathVariable key: String,
     ) = storageSystemEngine.delete(key)
 
+    @Put("/batch")
+    @Consumes("application/json")
+    fun batchPut(
+        @Body items: Map<String, String>,
+    ): HttpResponse<Unit> {
+        return try {
+            val byteItems = items.mapValues { it.value.toByteArray(Charsets.UTF_8) }
+            storageSystemEngine.batchPut(byteItems)
+            HttpResponse.ok()
+        } catch (e: Exception) {
+            HttpResponse.serverError()
+        }
+    }
+
+    @Get("/range/{startKey}/{endKey}")
+    @Produces("application/json")
+    fun getRange(
+        @PathVariable startKey: String,
+        @PathVariable endKey: String,
+    ): HttpResponse<Any> {
+        return try {
+            val results = storageSystemEngine.readKeyRange(startKey, endKey)
+            val response =
+                results.map { (key, value) ->
+                    mapOf("key" to key, "value" to (value?.let { String(it) } ?: ""))
+                }
+            if (response.isEmpty()) {
+                HttpResponse.noContent()
+            } else {
+                HttpResponse.ok(response)
+            }
+        } catch (e: Exception) {
+            HttpResponse.serverError<String>().body("Error retrieving range: ${e.message}")
+        }
+    }
+
     @Get("/ping")
     fun isHealthy() = "Application is up and running healthy!!!"
 }
