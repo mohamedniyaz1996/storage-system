@@ -3,7 +3,7 @@ package com.moniepoint.storage.system.engine.memtable
 import java.util.concurrent.ConcurrentSkipListMap
 import java.util.concurrent.atomic.AtomicLong
 
-class MemTable(private val maxSizeBytes: Long) {
+class MemTable(private val maxSizeBytes: Long = 128 * 1024 * 1024) {
     private val data = ConcurrentSkipListMap<String, ByteArray?>()
     private val sizeInBytes = AtomicLong(0)
 

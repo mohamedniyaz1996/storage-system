@@ -15,14 +15,23 @@ class StorageSystemEngine(
 ) : StorageEngineInterface {
     private val rootDir = File(rootDirPath).apply { if (!exists()) mkdirs() }
     private val wal = WriteAheadLog(File(rootDir, "current.wal"))
-    private var memTable = MemTable(128 * 1024 * 1024) // setting 124MB as default
+    private var memTable = MemTable()
 
     private val ssTables = CopyOnWriteArrayList<SSTable>()
 
+    private var nextSequence = 0L
+
     init {
-        val files = rootDir.listFiles { _, name -> name.endsWith(".db") }
-        files?.sortedByDescending { it.lastModified() }?.forEach { file ->
+        val existingFiles =
+            rootDir.listFiles { _, name -> name.endsWith(".db") }
+                ?.sortedByDescending { it.name } // Newest sequence first
+
+        existingFiles?.forEach { file ->
             ssTables.add(SSTable(file))
+            val seq = file.name.substringBefore(".db").toLongOrNull() ?: 0L
+            if (seq >= nextSequence) {
+                nextSequence = seq + 1
+            }
         }
 
         recoverFromWal()
@@ -39,23 +48,18 @@ class StorageSystemEngine(
     }
 
     private fun flushMemTable() {
-        val fileName = "ssTable-${System.currentTimeMillis()}.db"
+        val fileName = String.format("%010d.db", nextSequence++)
         val tempFile = File(rootDir, "$fileName.tmp")
         val finalFile = File(rootDir, fileName)
 
         val newTable = SSTable(tempFile)
-
-        // Write MemTable to temporary file
         newTable.write(memTable.retrieveSortedEntries())
 
-        // Atomic Rename
         tempFile.renameTo(finalFile)
 
-        // Update memory state
         ssTables.add(0, SSTable(finalFile))
 
-        // Safe to clear MemTable and WAL now
-        memTable.clear()
+        memTable = MemTable()
         wal.clear()
     }
 
@@ -77,7 +81,7 @@ class StorageSystemEngine(
     }
 
     override fun read(key: String): ByteArray? {
-        if (memTable.containsKey(key) || memTable.get(key) != null) {
+        if (memTable.containsKey(key)) {
             return memTable.get(key)
         }
 
