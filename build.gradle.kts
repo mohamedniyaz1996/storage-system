@@ -9,6 +9,7 @@ plugins {
     id("com.gradleup.shadow") version "8.3.9"
     id("io.micronaut.aot") version "4.6.1"
     id("com.diffplug.spotless") version "6.25.0"
+    id("application")
 }
 
 version = "0.1"

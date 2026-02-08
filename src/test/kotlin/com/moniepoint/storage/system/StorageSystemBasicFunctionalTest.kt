@@ -105,5 +105,24 @@ class StorageSystemBasicFunctionalTest(
 
             storageSystemClient.toBlocking().retrieve(key) shouldBe "v5"
         }
+
+        test("should handle empty batch put requests gracefully") {
+            val emptyPayload = BatchPutRequest(items = emptyList())
+            val response =
+                storageSystemClient.toBlocking().exchange(
+                    HttpRequest.PUT("/batch", emptyPayload),
+                    Unit::class.java,
+                )
+            response.status shouldBe HttpStatus.CREATED
+        }
+
+        test("should return empty list when no keys exist in the provided range") {
+            val results =
+                storageSystemClient.toBlocking().retrieve(
+                    HttpRequest.GET<Any>("/range/m/n"),
+                    Argument.listOf(Map::class.java),
+                )
+            results shouldBe emptyList<Any>()
+        }
     }
 }
