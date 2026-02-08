@@ -31,6 +31,37 @@ class WriteAheadLog(private val file: File) {
         channel.force(true)
     }
 
+    fun readAllEntries(): List<Pair<String, ByteArray?>> {
+        val entries = mutableListOf<Pair<String, ByteArray?>>()
+        if (file.length() == 0L) return entries
+
+        RandomAccessFile(file, "r").use { randomAccessFile ->
+            while (randomAccessFile.filePointer < randomAccessFile.length()) {
+                try {
+                    val totalEntrySize = randomAccessFile.readInt()
+                    val keySize = randomAccessFile.readInt()
+                    val keyBytes = ByteArray(keySize)
+                    randomAccessFile.read(keyBytes)
+                    val key = String(keyBytes)
+
+                    val valueSize = randomAccessFile.readInt()
+                    val value = if (valueSize == -1) {
+                        null
+                    } else {
+                        val valueBytes = ByteArray(valueSize)
+                        randomAccessFile.read(valueBytes)
+                        valueBytes
+                    }
+                    entries.add(key to value)
+                } catch (e: Exception) {
+                    println("Exception : ${e.message}")
+                    break
+                }
+            }
+        }
+        return entries
+    }
+
     fun clear() {
         channel.truncate(0)
     }

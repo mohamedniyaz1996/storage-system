@@ -9,13 +9,32 @@ import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 
 @Singleton
-class StorageEngine: StorageEngineInterface {
+class StorageSystemEngine: StorageEngineInterface {
 
     private val rootDir = File("data").apply { if(!exists()) mkdirs() }
     private val wal= WriteAheadLog(File(rootDir, "current.wal"))
     private var memTable = MemTable(128 * 1024 * 1024) // setting 124MB as default
 
     private val ssTables = CopyOnWriteArrayList<SSTable>()
+
+    init {
+        val files = rootDir.listFiles { _, name -> name.endsWith(".db")}
+        files?.sortedByDescending { it.lastModified() }?.forEach { file ->
+            ssTables.add(SSTable(file))
+        }
+
+        recoverFromWal()
+    }
+
+    private fun recoverFromWal() {
+        val walFile = File(rootDir, "current.wal")
+        if (!walFile.exists()) return
+
+        val entries = wal.readAllEntries()
+        entries.forEach { (key, value) ->
+            memTable.put(key, value)
+        }
+    }
 
     private fun flushMemTable() {
         val fileName = "ssTable-${System.currentTimeMillis()}.db"
@@ -58,7 +77,22 @@ class StorageEngine: StorageEngineInterface {
         startKey: String,
         endKey: String
     ): List<Pair<String, ByteArray?>> {
-        return memTable.getRange(startKey, endKey)
+        val resultTracker = mutableMapOf<String, ByteArray?>()
+
+        ssTables.reversed().forEach { table ->
+            table.getRange(startKey, endKey).forEach { (k, v) ->
+                resultTracker[k] = v
+            }
+        }
+
+        memTable.getRange(startKey, endKey).forEach { (k, v) ->
+            resultTracker[k] = v
+        }
+
+        return resultTracker.entries
+            .filter { it.value != null }
+            .map { it.key to it.value }
+            .sortedBy { it.first }
     }
 
     override fun delete(key: String) {
