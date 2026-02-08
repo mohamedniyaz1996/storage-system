@@ -4,6 +4,17 @@ This project is a high-performance, persistent Key-Value storage engine based on
 
 ---
 
+## Table of Contents
+1. [Project Structure](#Project-Structure)
+2. [How to Run](#How-to-Run)
+3. [CURL API Documentation](#CURL-API-Documentation)
+    * [Put a Key-Value Pair](#put-a-key-value-pair)
+    * [Get a Value](#get-a-value)
+    * [Batch Put](#batch-put)
+    * [Range Scan](#range-scan)
+    * [Delete a Key](#delete-a-key-tombstone)
+4. [Architecture & Trade-Offs](#architecture--trade-offs)
+
 ## Project Structure
 
 ```text
@@ -31,7 +42,7 @@ src/
 
 ### 1. Local Mode
 
-Ensure you have JDK 17+ installed.
+Ensure you have JDK 21+ installed.
 
 ```declarative
 # Build the project
