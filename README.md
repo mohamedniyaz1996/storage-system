@@ -53,9 +53,26 @@ Ensure you have JDK 21+ installed.
 ```
 The server will start on http://localhost:8080. Data is stored in the directory defined in application.yml (default: ./data).
 
+### 2. Docker (Pre-built Image)
+Use the official image hosted on GitHub Container Registry (GHCR). This is the fastest way to get up and running without local build tools.
 
-### 2. Docker Mode
-This project includes a multi-stage Dockerfile for optimized builds.
+##### For Standard systems
+```declarative
+docker run -d -p 8080:8080 --name storage-system ghcr.io/mohamedniyaz1996/storage-system:latest
+```
+
+##### For Apple Silicon (M1/M2/M3) or ARM64:
+```declarative
+docker run -d -p 8080:8080 --platform linux/amd64 --name storage-system ghcr.io/mohamedniyaz1996/storage-system:latest
+```
+
+Once the docker has started - Check if the system is running correctly:
+```declarative
+curl -i http://localhost:8080/v1/storage-system/ping
+```
+
+### 3. Docker (Build from Source)
+This project includes a multi-stage Dockerfile for optimized builds. This step will take time
 
 ```declarative
 # Build the image and run
