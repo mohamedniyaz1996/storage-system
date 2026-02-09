@@ -9,6 +9,32 @@ import jakarta.inject.Singleton
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 
+/**
+ * The core Log-Structured Merge-Tree (LSM-Tree) storage engine.
+ * * This class orchestrates the lifecycle of data from volatile memory to persistent
+ * storage, coordinating the MemTable, Write-Ahead Log (WAL), and SSTables to
+ * ensure ACID compliance and high-performance throughput.
+ *
+ * ### Data Flow
+ * 1. **Write Path:** Data is first appended to the [WriteAheadLog] for durability,
+ * then stored in the [MemTable]. When the MemTable exceeds its size threshold,
+ * it is "flushed"—serialized into a new [SSTable] file and the WAL is cleared.
+ * 2. **Read Path:** Searches follow a strict hierarchy: [MemTable] (most recent)
+ * -> [ssTables] (ordered by newest to oldest). This ensures the most up-to-date
+ * version of a key is always returned.
+ * *
+ *
+ * ### Key Responsibilities
+ * * **Crash Recovery:** On startup, replays the [WAL] to reconstruct any data
+ * that wasn't flushed to an SSTable before a shutdown.
+ * * **Concurrency Management:** Uses thread-safe collections for SSTable tracking
+ * and synchronization on write operations to maintain consistency.
+ * * **Compaction Readiness:** Manages the sequence numbering of immutable
+ * SSTable files (`.db`) stored in the root directory.
+ * * **Deletion Handling:** Implements "tombstones" to mark data as deleted
+ * across the distributed storage layers.
+ *
+ */
 @Singleton
 class StorageSystemEngine(
     @property:Property(name = "storage.root-dir") private val rootDirPath: String = "data",

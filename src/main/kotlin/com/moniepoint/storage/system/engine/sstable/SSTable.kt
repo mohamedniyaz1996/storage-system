@@ -6,6 +6,33 @@ import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 
+/**
+ * A Sorted String Table (SSTable) for efficient, persistent key-value storage.
+ *
+ * This class handles reading and writing sorted data to disk. It uses a
+ * "sparse index" and a Bloom filter to provide high-performance lookups
+ * without loading the entire data file into memory.
+ *
+ * ### Key Components
+ * * **Bloom Filter:** A probabilistic data structure used to quickly check if
+ * a key exists. This prevents unnecessary and expensive disk reads for
+ * missing keys.
+ * * **Sparse Index:** Stores the disk offset for every 100th key. This allows
+ * the system to jump to a nearby location on disk and perform a short
+ * linear scan rather than reading the whole file.
+ * * **Tombstones:** Supports deletions by marking values with a size of `-1`.
+ *
+ *
+ *
+ * ### Search Strategy
+ * 1. **Filter Check:** Consults the Bloom Filter. If it returns `false`,
+ * the search ends immediately.
+ * 2. **Index Lookup:** Finds the closest preceding key in the [sparseIndex]
+ * to determine the starting disk offset.
+ * 3. **Linear Scan:** Reads sequentially from that offset until the key
+ * is found or the current key exceeds the target.
+ *
+ */
 class SSTable(val file: File) {
     private val sparseIndex = mutableMapOf<String, Long>()
     private val bloomFilter = BloomFilter(size = 100_000, numHashFunctions = 3)

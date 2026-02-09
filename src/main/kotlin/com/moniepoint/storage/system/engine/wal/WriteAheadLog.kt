@@ -5,6 +5,22 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.util.zip.CRC32
 
+/**
+ * A simple, persistent Write-Ahead Log (WAL) designed for data durability.
+ *
+ * This class records every operation to a file on disk before it is applied to
+ * the main database. If the system crashes, the log can be replayed to restore
+ * the in-memory state.
+ *
+ * Each log entry is stored in the following binary format:
+ * 1. **Total Size** (4 bytes): Length of the entire record.
+ * 2. **CRC Checksum** (8 bytes): Protection against data corruption.
+ * 3. **Key Size** (4 bytes): Length of the key string.
+ * 4. **Key** (Variable): The actual key bytes.
+ * 5. **Value Size** (4 bytes): Length of the value (-1 indicates a deletion).
+ * 6. **Value** (Variable): The actual data (skipped if deleted).
+ *
+ */
 class WriteAheadLog(private val file: File) {
     private val randomAccessFile = RandomAccessFile(file, "rw")
     private val channel = randomAccessFile.channel
